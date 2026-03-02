@@ -215,7 +215,7 @@ toolsets:
         - long_running_transactions
         - list_locks
         - list_database_stats
-    optimization:
+    optimize:
         - list_query_stats
         - list_table_stats
         - get_column_cardinality

@@ -356,7 +356,7 @@ toolsets:
         - get_system_metrics
         - get_query_metrics
         - list_database_stats
-    optimization:
+    optimize:
         - list_query_stats
         - list_table_stats
         - get_column_cardinality
