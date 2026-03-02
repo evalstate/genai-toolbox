@@ -14,7 +14,7 @@
 
 import { loadTools } from "./loadTools.js";
 
-document.addEventListener('DOMContentLoaded', () => {
+export function initToolsets() {
     const searchInput = document.getElementById('toolset-search-input');
     const searchButton = document.getElementById('toolset-search-button');
     const secondNavContent = document.getElementById('secondary-panel-content');
@@ -48,4 +48,4 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
-})
+}

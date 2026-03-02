@@ -18,7 +18,7 @@ import { loadTools } from "./loadTools.js";
  * These functions runs after the browser finishes loading and parsing HTML structure.
  * This ensures that elements can be safely accessed.
  */
-document.addEventListener('DOMContentLoaded', () => {
+export function initTools() {
     const toolDisplayArea = document.getElementById('tool-display-area');
     const secondaryPanelContent = document.getElementById('secondary-panel-content');
     const DEFAULT_TOOLSET = ""; // will return all toolsets
@@ -29,4 +29,4 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     loadTools(secondaryPanelContent, toolDisplayArea, DEFAULT_TOOLSET);
-});
+}
