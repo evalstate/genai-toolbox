@@ -19,9 +19,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/MicahParks/keyfunc/v3"
@@ -73,40 +75,91 @@ func (cfg Config) Initialize() (auth.AuthService, error) {
 	}
 	return a, nil
 }
+// safeDialer prevents connections to private, loopback, or link-local addresses.
+func safeDialer() *net.Dialer {
+	return &net.Dialer{
+		Timeout:   5 * time.Second,
+		KeepAlive: 30 * time.Second,
+		Control: func(network, address string, c syscall.RawConn) error {
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return err
+			}
+			ip := net.ParseIP(host)
+			if ip == nil {
+				return fmt.Errorf("invalid IP address")
+			}
+			// Block private, loopback, and link-local
+			if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+				return fmt.Errorf("connection to internal/private IP blocked: %s", ip)
+			}
+			return nil
+		},
+	}
+}
 
 func discoverJWKSURL(authURL string) (string, error) {
-	oidcConfigURL, err := url.JoinPath(authURL, ".well-known/openid-configuration")
-	if err != nil {
-		return authURL, nil
+	u, err := url.Parse(authURL)
+	if err != nil || u.Scheme != "https" {
+		return "", fmt.Errorf("invalid or insecure auth URL: must be HTTPS")
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	oidcConfigURL, err := url.JoinPath(authURL, ".well-known/openid-configuration")
+	if err != nil {
+		return "", err
+	}
+
+	// HTTP Client
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			DialContext:           safeDialer().DialContext,
+			ForceAttemptHTTP2:     true,
+			MaxIdleConns:          10,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   5 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		},
+		// Prevent redirect loops or redirects to internal sites
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse 
+		},
+	}
+
 	resp, err := client.Get(oidcConfigURL)
 	if err != nil {
-		return authURL, nil
+		return "", fmt.Errorf("failed to fetch OIDC config: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return authURL, nil
+		return "", fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 
+	// Limit read size to 1MB to prevent memory exhaustion
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return authURL, nil
+		return "", err
 	}
 
-	var config map[string]interface{}
+	var config struct {
+		JWKSURI string `json:"jwks_uri"`
+	}
 	if err := json.Unmarshal(body, &config); err != nil {
-		return authURL, nil
+		return "", err
 	}
 
-	jwksURI, ok := config["jwks_uri"].(string)
-	if !ok || jwksURI == "" {
-		return authURL, nil
+	if config.JWKSURI == "" {
+		return "", fmt.Errorf("jwks_uri not found in config")
 	}
 
-	return jwksURI, nil
+	// Sanitize the resulting JWKS URI before returning it
+	parsedJWKS, err := url.Parse(config.JWKSURI)
+	if err != nil || parsedJWKS.Scheme != "https" {
+		return "", fmt.Errorf("malicious jwks_uri detected")
+	}
+
+	return config.JWKSURI, nil
 }
 
 var _ auth.AuthService = AuthService{}
