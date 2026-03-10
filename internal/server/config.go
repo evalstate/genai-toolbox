@@ -70,6 +70,8 @@ type ServerConfig struct {
 	DisableReload bool
 	// UI indicates if Toolbox UI endpoints (/ui) are available.
 	UI bool
+	// McpAuthUrl specifies the URL to advertise in the MCP PRM file.
+	McpAuthUrl string
 	// Specifies a list of origins permitted to access this server.
 	AllowedOrigins []string
 	// Specifies a list of hosts permitted to access this server.

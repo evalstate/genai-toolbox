@@ -75,6 +75,7 @@ func (cfg Config) Initialize() (auth.AuthService, error) {
 	}
 	return a, nil
 }
+
 // safeDialer prevents connections to private, loopback, or link-local addresses.
 func safeDialer() *net.Dialer {
 	return &net.Dialer{
@@ -122,7 +123,7 @@ func discoverJWKSURL(authURL string) (string, error) {
 		},
 		// Prevent redirect loops or redirects to internal sites
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse 
+			return http.ErrUseLastResponse
 		},
 	}
 
@@ -193,7 +194,7 @@ func (a AuthService) GetClaimsFromHeader(ctx context.Context, h http.Header) (ma
 
 	parts := strings.Split(authHeader, " ")
 	if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-		return nil, fmt.Errorf("Authorization header format must be Bearer {token}")
+		return nil, fmt.Errorf("authorization header format must be Bearer {token}")
 	}
 	tokenString := parts[1]
 

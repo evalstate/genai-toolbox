@@ -122,6 +122,7 @@ func NewCommand(opts *internal.ToolboxOptions) *cobra.Command {
 	flags.BoolVar(&opts.Cfg.Stdio, "stdio", false, "Listens via MCP STDIO instead of acting as a remote HTTP server.")
 	flags.BoolVar(&opts.Cfg.DisableReload, "disable-reload", false, "Disables dynamic reloading of tools file.")
 	flags.BoolVar(&opts.Cfg.UI, "ui", false, "Launches the Toolbox UI web server.")
+	flags.StringVar(&opts.Cfg.McpAuthUrl, "enable-mcp-auth", "", "Enables the MCP OAuth Protected Resource Metadata (PRM) endpoint and sets the Toolbox issuer/authorization_endpoint URL to advertise.")
 	// TODO: Insecure by default. Might consider updating this for v1.0.0
 	flags.StringSliceVar(&opts.Cfg.AllowedOrigins, "allowed-origins", []string{"*"}, "Specifies a list of origins permitted to access this server. Defaults to '*'.")
 	flags.StringSliceVar(&opts.Cfg.AllowedHosts, "allowed-hosts", []string{"*"}, "Specifies a list of hosts permitted to access this server. Defaults to '*'.")

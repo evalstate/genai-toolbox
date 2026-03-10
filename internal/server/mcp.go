@@ -30,6 +30,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/google/uuid"
+	"github.com/googleapis/genai-toolbox/internal/auth/generic"
 	"github.com/googleapis/genai-toolbox/internal/server/mcp"
 	"github.com/googleapis/genai-toolbox/internal/server/mcp/jsonrpc"
 	mcputil "github.com/googleapis/genai-toolbox/internal/server/mcp/util"
@@ -332,6 +333,9 @@ func mcpRouter(s *Server) (chi.Router, error) {
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) { methodNotAllowed(s, w, r) })
 	r.Post("/", func(w http.ResponseWriter, r *http.Request) { httpHandler(s, w, r) })
 	r.Delete("/", func(w http.ResponseWriter, r *http.Request) {})
+	if s.mcpAuthUrl != "" {
+		r.Get("/.well-known/oauth-protected-resource", func(w http.ResponseWriter, r *http.Request) { prmHandler(s, w, r) })
+	}
 
 	r.Route("/{toolsetName}", func(r chi.Router) {
 		r.Get("/sse", func(w http.ResponseWriter, r *http.Request) { sseHandler(s, w, r) })
@@ -749,5 +753,53 @@ func processMcpMessage(ctx context.Context, body []byte, s *Server, protocolVers
 			}
 		}
 		return "", result, err
+	}
+}
+
+type prmResponse struct {
+	AuthorizationServers []authorizationServer `json:"authorization_servers"`
+}
+
+type authorizationServer struct {
+	Issuer                string   `json:"issuer"`
+	AuthorizationEndpoint string   `json:"authorization_endpoint"`
+	TokenEndpoint         string   `json:"token_endpoint"`
+	ScopesSupported       []string `json:"scopes_supported,omitempty"`
+}
+
+// prmHandler generates the Protected Resource Metadata (PRM) file for MCP Authorization.
+func prmHandler(s *Server, w http.ResponseWriter, r *http.Request) {
+	var servers []authorizationServer
+	for _, authSvc := range s.ResourceMgr.GetAuthServiceMap() {
+		cfg := authSvc.ToConfig()
+		if genCfg, ok := cfg.(generic.Config); ok {
+			if genCfg.McpEnabled {
+				serverEntry := authorizationServer{
+					Issuer:                genCfg.AuthURL,
+					AuthorizationEndpoint: genCfg.AuthURL,
+					TokenEndpoint:         genCfg.AuthURL,
+					ScopesSupported:       genCfg.ScopesRequired,
+				}
+				// ensure we return empty list over nil
+				if serverEntry.ScopesSupported == nil {
+					serverEntry.ScopesSupported = []string{}
+				}
+				servers = append(servers, serverEntry)
+			}
+		}
+	}
+
+	if servers == nil {
+		servers = []authorizationServer{}
+	}
+
+	res := prmResponse{
+		AuthorizationServers: servers,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(res); err != nil {
+		s.logger.ErrorContext(r.Context(), fmt.Sprintf("Failed to encode PRM response: %v", err))
+		http.Error(w, "Failed to encode PRM response", http.StatusInternalServerError)
 	}
 }
