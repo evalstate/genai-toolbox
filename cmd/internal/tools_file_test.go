@@ -692,7 +692,7 @@ func TestParseToolFile(t *testing.T) {
 					"my-generic-auth": generic.Config{
 						Name:           "my-generic-auth",
 						Type:           generic.AuthServiceType,
-						ClientID:       "testings",
+						Audience:       "testings",
 						McpEnabled:     true,
 						AuthURL:        "https://testings",
 						ScopesRequired: []string{"read:files", "write:files"},
