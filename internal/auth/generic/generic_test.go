@@ -94,7 +94,7 @@ func TestGetClaimsFromHeader(t *testing.T) {
 	cfg := Config{
 		Name:           "test-generic-auth",
 		Type:           "generic",
-		ClientID:       "my-audience",
+		Audience:       "my-audience",
 		McpEnabled:     true,
 		AuthURL:        server.URL,
 		ScopesRequired: []string{"read:files"},
@@ -192,7 +192,7 @@ func TestGetClaimsFromHeader(t *testing.T) {
 			errContains: "missing required scope: read:files",
 		},
 		{
-			name: "client_id used instead of aud (valid)",
+			name: "client_id used instead of aud is invalid now",
 			setupHeader: func() http.Header {
 				token := generateValidToken(t, privateKey, keyID, jwt.MapClaims{
 					"client_id": "my-audience",
@@ -203,7 +203,8 @@ func TestGetClaimsFromHeader(t *testing.T) {
 				header.Set("Authorization", "Bearer "+token)
 				return header
 			},
-			wantError: false,
+			wantError:   true,
+			errContains: "audience validation failed",
 		},
 		{
 			name: "expired token",

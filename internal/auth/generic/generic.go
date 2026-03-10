@@ -18,7 +18,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -36,7 +38,7 @@ var _ auth.AuthServiceConfig = Config{}
 type Config struct {
 	Name           string   `yaml:"name" validate:"required"`
 	Type           string   `yaml:"type" validate:"required"`
-	ClientID       string   `yaml:"clientId" validate:"required"`
+	Audience       string   `yaml:"audience" validate:"required"`
 	McpEnabled     bool     `yaml:"mcpEnabled"`
 	AuthURL        string   `yaml:"authUrl" validate:"required"`
 	ScopesRequired []string `yaml:"scopesRequired"`
@@ -73,27 +75,35 @@ func (cfg Config) Initialize() (auth.AuthService, error) {
 }
 
 func discoverJWKSURL(authURL string) (string, error) {
-	authURL = strings.TrimSuffix(authURL, "/")
-	oidcConfigURL := authURL + "/.well-known/openid-configuration"
+	oidcConfigURL, err := url.JoinPath(authURL, ".well-known/openid-configuration")
+	if err != nil {
+		return authURL, nil
+	}
+
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(oidcConfigURL)
 	if err != nil {
-		return "", err
+		return authURL, nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to fetch OIDC config, status code %d", resp.StatusCode)
+		return authURL, nil
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return authURL, nil
 	}
 
 	var config map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&config); err != nil {
-		return "", err
+	if err := json.Unmarshal(body, &config); err != nil {
+		return authURL, nil
 	}
 
 	jwksURI, ok := config["jwks_uri"].(string)
 	if !ok || jwksURI == "" {
-		return "", fmt.Errorf("jwks_uri not found in OIDC configuration at %s", oidcConfigURL)
+		return authURL, nil
 	}
 
 	return jwksURI, nil
@@ -166,23 +176,14 @@ func (a AuthService) GetClaimsFromHeader(ctx context.Context, h http.Header) (ma
 
 	isAudValid := false
 	for _, audItem := range aud {
-		if audItem == a.ClientID {
+		if audItem == a.Audience {
 			isAudValid = true
 			break
 		}
 	}
 
-	// Some IDPs use 'client_id' instead of 'aud' or put it as a single string, checking that if aud not found or not matched
 	if !isAudValid {
-		if clientIDClaim, ok := claims["client_id"].(string); ok && clientIDClaim == a.ClientID {
-			isAudValid = true
-		} else if audStr, ok := claims["aud"].(string); ok && audStr == a.ClientID {
-			isAudValid = true
-		}
-	}
-
-	if !isAudValid {
-		return nil, fmt.Errorf("audience validation failed: expected %s, got %v", a.ClientID, aud)
+		return nil, fmt.Errorf("audience validation failed: expected %s, got %v", a.Audience, aud)
 	}
 
 	// Validate 'scope' claim against ScopesRequired
@@ -212,11 +213,5 @@ func (a AuthService) GetClaimsFromHeader(ctx context.Context, h http.Header) (ma
 		}
 	}
 
-	// Return claims dynamically
-	claimsMap := make(map[string]any)
-	for k, v := range claims {
-		claimsMap[k] = v
-	}
-
-	return claimsMap, nil
+	return claims, nil
 }
