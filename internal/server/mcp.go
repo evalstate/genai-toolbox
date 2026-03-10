@@ -333,7 +333,15 @@ func mcpRouter(s *Server) (chi.Router, error) {
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) { methodNotAllowed(s, w, r) })
 	r.Post("/", func(w http.ResponseWriter, r *http.Request) { httpHandler(s, w, r) })
 	r.Delete("/", func(w http.ResponseWriter, r *http.Request) {})
-	if s.mcpAuthUrl != "" {
+	mcpAuthEnabled := false
+	for _, authSvc := range s.ResourceMgr.GetAuthServiceMap() {
+		if genCfg, ok := authSvc.ToConfig().(generic.Config); ok && genCfg.McpEnabled {
+			mcpAuthEnabled = true
+			break
+		}
+	}
+
+	if mcpAuthEnabled {
 		r.Get("/.well-known/oauth-protected-resource", func(w http.ResponseWriter, r *http.Request) { prmHandler(s, w, r) })
 	}
 
@@ -757,6 +765,7 @@ func processMcpMessage(ctx context.Context, body []byte, s *Server, protocolVers
 }
 
 type prmResponse struct {
+	Resource             string                `json:"resource"`
 	AuthorizationServers []authorizationServer `json:"authorization_servers"`
 }
 
@@ -794,6 +803,7 @@ func prmHandler(s *Server, w http.ResponseWriter, r *http.Request) {
 	}
 
 	res := prmResponse{
+		Resource:             s.toolboxUrl,
 		AuthorizationServers: servers,
 	}
 

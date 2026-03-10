@@ -35,6 +35,7 @@ import (
 	"github.com/googleapis/genai-toolbox/cmd/internal/invoke"
 	"github.com/googleapis/genai-toolbox/cmd/internal/skills"
 	"github.com/googleapis/genai-toolbox/internal/auth"
+	"github.com/googleapis/genai-toolbox/internal/auth/generic"
 	"github.com/googleapis/genai-toolbox/internal/embeddingmodels"
 	"github.com/googleapis/genai-toolbox/internal/prompts"
 	"github.com/googleapis/genai-toolbox/internal/server"
@@ -122,7 +123,7 @@ func NewCommand(opts *internal.ToolboxOptions) *cobra.Command {
 	flags.BoolVar(&opts.Cfg.Stdio, "stdio", false, "Listens via MCP STDIO instead of acting as a remote HTTP server.")
 	flags.BoolVar(&opts.Cfg.DisableReload, "disable-reload", false, "Disables dynamic reloading of tools file.")
 	flags.BoolVar(&opts.Cfg.UI, "ui", false, "Launches the Toolbox UI web server.")
-	flags.StringVar(&opts.Cfg.McpAuthUrl, "enable-mcp-auth", "", "Enables the MCP OAuth Protected Resource Metadata (PRM) endpoint and sets the Toolbox issuer/authorization_endpoint URL to advertise.")
+	flags.StringVar(&opts.Cfg.ToolboxUrl, "toolbox-url", "", "Specifies the Toolbox URL. Used as the resource field in the MCP PRM file when MCP Auth is enabled. Falls back to TOOLBOX_URL environment variable.")
 	// TODO: Insecure by default. Might consider updating this for v1.0.0
 	flags.StringSliceVar(&opts.Cfg.AllowedOrigins, "allowed-origins", []string{"*"}, "Specifies a list of origins permitted to access this server. Defaults to '*'.")
 	flags.StringSliceVar(&opts.Cfg.AllowedHosts, "allowed-hosts", []string{"*"}, "Specifies a list of hosts permitted to access this server. Defaults to '*'.")
@@ -457,6 +458,21 @@ func run(cmd *cobra.Command, opts *internal.ToolboxOptions) error {
 	isCustomConfigured, err := opts.LoadConfig(ctx, &internal.ToolsFileParser{})
 	if err != nil {
 		return err
+	}
+
+	// Validate ToolboxUrl if MCP Auth is enabled
+	for _, authSvc := range opts.Cfg.AuthServiceConfigs {
+		if genCfg, ok := authSvc.(generic.Config); ok && genCfg.McpEnabled {
+			if opts.Cfg.ToolboxUrl == "" {
+				opts.Cfg.ToolboxUrl = os.Getenv("TOOLBOX_URL")
+			}
+			if opts.Cfg.ToolboxUrl == "" {
+				errMsg := fmt.Errorf("MCP Auth is enabled but Toolbox URL is missing. Please provide it via --toolbox-url flag or TOOLBOX_URL environment variable")
+				opts.Logger.ErrorContext(ctx, errMsg.Error())
+				return errMsg
+			}
+			break // Only need to check once if any auth service has McpEnabled
+		}
 	}
 
 	// start server
