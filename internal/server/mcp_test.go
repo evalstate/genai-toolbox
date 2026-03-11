@@ -1239,6 +1239,8 @@ func TestPRMEndpoint(t *testing.T) {
 		"authorization_servers": []any{
 			"https://example.com/oauth",
 		},
+		"scopes_supported":         []any{"read", "write"},
+		"bearer_methods_supported": []any{"header"},
 	}
 
 	if !reflect.DeepEqual(got, want) {
