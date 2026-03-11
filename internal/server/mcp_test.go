@@ -1247,3 +1247,77 @@ func TestPRMEndpoint(t *testing.T) {
 		t.Errorf("unexpected PRM response: got %+v, want %+v", got, want)
 	}
 }
+
+func TestPRMEndpoint_ManualFile(t *testing.T) {
+	// Create a temporary manual PRM file
+	tmpFile, err := os.CreateTemp("", "manual_prm_*.json")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	manualPRMContent := []byte(`{
+		"resource": "https://manual.example.com/mcp",
+		"authorization_servers": ["https://manual-auth.example.com"],
+		"scopes_supported": ["manual:scope"],
+		"bearer_methods_supported": ["header"]
+	}`)
+
+	if _, err := tmpFile.Write(manualPRMContent); err != nil {
+		t.Fatalf("failed to write to temp file: %v", err)
+	}
+	tmpFile.Close()
+
+	// Initialize the server with the manual PRM file path
+	resourceManager := resources.NewResourceManager(nil, nil, nil, nil, nil, nil, nil)
+	testLogger, err := log.NewStdLogger(os.Stdout, os.Stderr, "info")
+	if err != nil {
+		t.Fatalf("unable to initialize logger: %s", err)
+	}
+
+	s := &Server{
+		logger:      testLogger,
+		ResourceMgr: resourceManager,
+		mcpPrmFile:  tmpFile.Name(), // Inject manual config path
+	}
+
+	r, err := mcpRouter(s)
+	if err != nil {
+		t.Fatalf("unexpected error creating router: %v", err)
+	}
+
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+
+	// Make the request
+	resp, body, err := runRequest(ts, http.MethodGet, "/.well-known/oauth-protected-resource", nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error during request: %s", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.StatusCode)
+	}
+	if contentType := resp.Header.Get("Content-Type"); contentType != "application/json" {
+		t.Fatalf("expected content-type application/json, got %s", contentType)
+	}
+
+	// Verify the response body matches the exact contents of the manual file
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("unexpected error unmarshalling body: %s", err)
+	}
+
+	want := map[string]any{
+		"resource": "https://manual.example.com/mcp",
+		"authorization_servers": []any{
+			"https://manual-auth.example.com",
+		},
+		"scopes_supported":         []any{"manual:scope"},
+		"bearer_methods_supported": []any{"header"},
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("unexpected manual PRM response: got %+v, want %+v", got, want)
+	}
+}
