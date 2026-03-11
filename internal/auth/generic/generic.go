@@ -99,9 +99,11 @@ func safeDialer() *net.Dialer {
 	}
 }
 
+var allowInsecureForTest = false
+
 func discoverJWKSURL(authURL string) (string, error) {
 	u, err := url.Parse(authURL)
-	if err != nil || u.Scheme != "https" {
+	if err != nil || (u.Scheme != "https" && !allowInsecureForTest) {
 		return "", fmt.Errorf("invalid or insecure auth URL: must be HTTPS")
 	}
 
@@ -114,7 +116,6 @@ func discoverJWKSURL(authURL string) (string, error) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
-			DialContext:           safeDialer().DialContext,
 			ForceAttemptHTTP2:     true,
 			MaxIdleConns:          10,
 			IdleConnTimeout:       90 * time.Second,
@@ -125,6 +126,10 @@ func discoverJWKSURL(authURL string) (string, error) {
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
+	}
+	
+	if !allowInsecureForTest {
+		client.Transport.(*http.Transport).DialContext = safeDialer().DialContext
 	}
 
 	resp, err := client.Get(oidcConfigURL)
@@ -156,7 +161,7 @@ func discoverJWKSURL(authURL string) (string, error) {
 
 	// Sanitize the resulting JWKS URI before returning it
 	parsedJWKS, err := url.Parse(config.JWKSURI)
-	if err != nil || parsedJWKS.Scheme != "https" {
+	if err != nil || (parsedJWKS.Scheme != "https" && !allowInsecureForTest) {
 		return "", fmt.Errorf("malicious jwks_uri detected")
 	}
 

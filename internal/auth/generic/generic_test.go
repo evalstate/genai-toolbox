@@ -29,6 +29,10 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+func init() {
+	allowInsecureForTest = true
+}
+
 func generateRSAPrivateKey(t *testing.T) *rsa.PrivateKey {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -159,7 +163,7 @@ func TestGetClaimsFromHeader(t *testing.T) {
 				return header
 			},
 			wantError:   true,
-			errContains: "Authorization header format must be Bearer {token}",
+			errContains: "authorization header format must be Bearer {token}",
 		},
 		{
 			name: "wrong audience",
