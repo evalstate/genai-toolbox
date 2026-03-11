@@ -127,7 +127,7 @@ func discoverJWKSURL(authURL string) (string, error) {
 			return http.ErrUseLastResponse
 		},
 	}
-	
+
 	if !allowInsecureForTest {
 		client.Transport.(*http.Transport).DialContext = safeDialer().DialContext
 	}
