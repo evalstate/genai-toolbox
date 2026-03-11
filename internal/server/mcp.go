@@ -782,6 +782,11 @@ func prmHandler(s *Server, w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
+		if !json.Valid(prmBytes) {
+            s.logger.ErrorContext(r.Context(), "manual PRM file is not valid JSON", "path", s.mcpPrmFile)
+            http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+            return
+        }
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write(prmBytes); err != nil {
