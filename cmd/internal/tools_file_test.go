@@ -629,7 +629,7 @@ func TestParseToolFile(t *testing.T) {
 			kind: authServices
 			name: my-generic-auth
 			type: generic
-			clientId: testings
+			audience: testings
 			authUrl: https://testings
 			mcpEnabled: true
 			scopesRequired:

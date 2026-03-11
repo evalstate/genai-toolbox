@@ -471,7 +471,7 @@ func run(cmd *cobra.Command, opts *internal.ToolboxOptions) error {
 				opts.Logger.ErrorContext(ctx, errMsg.Error())
 				return errMsg
 			}
-			break // Only need to check once if any auth service has McpEnabled
+			break
 		}
 	}
 

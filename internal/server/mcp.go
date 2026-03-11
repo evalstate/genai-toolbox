@@ -765,41 +765,24 @@ func processMcpMessage(ctx context.Context, body []byte, s *Server, protocolVers
 }
 
 type prmResponse struct {
-	Resource             string                `json:"resource"`
-	AuthorizationServers []authorizationServer `json:"authorization_servers"`
-}
-
-type authorizationServer struct {
-	Issuer                string   `json:"issuer"`
-	AuthorizationEndpoint string   `json:"authorization_endpoint"`
-	TokenEndpoint         string   `json:"token_endpoint"`
-	ScopesSupported       []string `json:"scopes_supported,omitempty"`
+	Resource             string   `json:"resource"`
+	AuthorizationServers []string `json:"authorization_servers"`
 }
 
 // prmHandler generates the Protected Resource Metadata (PRM) file for MCP Authorization.
 func prmHandler(s *Server, w http.ResponseWriter, r *http.Request) {
-	var servers []authorizationServer
+	var servers []string
 	for _, authSvc := range s.ResourceMgr.GetAuthServiceMap() {
 		cfg := authSvc.ToConfig()
 		if genCfg, ok := cfg.(generic.Config); ok {
 			if genCfg.McpEnabled {
-				serverEntry := authorizationServer{
-					Issuer:                genCfg.AuthURL,
-					AuthorizationEndpoint: genCfg.AuthURL,
-					TokenEndpoint:         genCfg.AuthURL,
-					ScopesSupported:       genCfg.ScopesRequired,
-				}
-				// ensure we return empty list over nil
-				if serverEntry.ScopesSupported == nil {
-					serverEntry.ScopesSupported = []string{}
-				}
-				servers = append(servers, serverEntry)
+				servers = append(servers, genCfg.AuthURL)
 			}
 		}
 	}
 
 	if servers == nil {
-		servers = []authorizationServer{}
+		servers = []string{}
 	}
 
 	res := prmResponse{
