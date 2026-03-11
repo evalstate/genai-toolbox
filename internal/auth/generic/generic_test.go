@@ -163,7 +163,7 @@ func TestGetClaimsFromHeader(t *testing.T) {
 				return header
 			},
 			wantError:   true,
-			errContains: "authorization header format must be Bearer {token}",
+			errContains: "Authorization header format must be Bearer {token}",
 		},
 		{
 			name: "wrong audience",
