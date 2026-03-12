@@ -207,19 +207,30 @@ func getCloudLoggingAdminToolsConfig(sourceConfig map[string]any) map[string]any
 
 func runListLogNamesTest(t *testing.T, expectedLogName string) {
 	t.Run("list-log-names", func(t *testing.T) {
-		resp, respBody := tests.RunRequest(t, http.MethodPost, "http://127.0.0.1:5000/api/tool/list-log-names/invoke", bytes.NewBuffer([]byte(`{}`)), nil)
+		payload := `{"jsonrpc":"2.0","id":"1","method":"tools/call","params":{"name":"list-log-names","arguments":{}}}`
+		resp, respBody := tests.RunRequest(t, http.MethodPost, "http://127.0.0.1:5000/mcp", bytes.NewBuffer([]byte(payload)), nil)
 		defer resp.Body.Close()
 
 		if resp.StatusCode != 200 {
 			t.Fatalf("expected status 200, got %d", resp.StatusCode)
 		}
 
-		var body map[string]interface{}
-		if err := json.Unmarshal(respBody, &body); err != nil {
-			t.Fatalf("error parsing response body")
+		type ToolResponse struct {
+			Result *struct {
+				Content []struct {
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"result"`
 		}
-
-		result, ok := body["result"].(string)
+		var body ToolResponse
+		if err := json.Unmarshal(respBody, &body); err != nil {
+			t.Fatalf("error parsing response body: %v", err)
+		}
+		if body.Result == nil || len(body.Result.Content) == 0 {
+			t.Fatalf("expected result content")
+		}
+		result := body.Result.Content[0].Text
+		ok := true
 		if !ok {
 			t.Fatalf("expected result to be string")
 		}
@@ -232,18 +243,29 @@ func runListLogNamesTest(t *testing.T, expectedLogName string) {
 
 func runListResourceTypesTest(t *testing.T) {
 	t.Run("list-resource-types", func(t *testing.T) {
-		resp, respBody := tests.RunRequest(t, http.MethodPost, "http://127.0.0.1:5000/api/tool/list-resource-types/invoke", bytes.NewBuffer([]byte(`{}`)), nil)
+		payload := `{"jsonrpc":"2.0","id":"1","method":"tools/call","params":{"name":"list-resource-types","arguments":{}}}`
+		resp, respBody := tests.RunRequest(t, http.MethodPost, "http://127.0.0.1:5000/mcp", bytes.NewBuffer([]byte(payload)), nil)
 
 		if resp.StatusCode != 200 {
 			t.Fatalf("expected status 200, got %d", resp.StatusCode)
 		}
 
-		var body map[string]interface{}
-		if err := json.Unmarshal(respBody, &body); err != nil {
-			t.Fatalf("error parsing response body")
+		type ToolResponse struct {
+			Result *struct {
+				Content []struct {
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"result"`
 		}
-
-		result, ok := body["result"].(string)
+		var body ToolResponse
+		if err := json.Unmarshal(respBody, &body); err != nil {
+			t.Fatalf("error parsing response body: %v", err)
+		}
+		if body.Result == nil || len(body.Result.Content) == 0 {
+			t.Fatalf("expected result content")
+		}
+		result := body.Result.Content[0].Text
+		ok := true
 		if !ok {
 			t.Fatalf("expected result to be string")
 		}
@@ -300,19 +322,31 @@ func runQueryLogsTest(t *testing.T, logName string) {
 
 func invokeQueryTool(t *testing.T, requestBody string) string {
 	t.Helper()
-	resp, respBody := tests.RunRequest(t, http.MethodPost, "http://127.0.0.1:5000/api/tool/query-logs/invoke", bytes.NewBuffer([]byte(requestBody)), nil)
+	payload := fmt.Sprintf(`{"jsonrpc":"2.0","id":"1","method":"tools/call","params":{"name":"query-logs","arguments":%s}}`, requestBody)
+	resp, respBody := tests.RunRequest(t, http.MethodPost, "http://127.0.0.1:5000/mcp", bytes.NewBuffer([]byte(payload)), nil)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		t.Fatalf("expected status 200, got %d", resp.StatusCode)
 	}
 
-	var body map[string]interface{}
-	if err := json.Unmarshal(respBody, &body); err != nil {
-		t.Fatalf("error parsing response body")
+	type ToolResponse struct {
+		Result *struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"result"`
 	}
-
-	result, ok := body["result"].(string)
+	var body ToolResponse
+	if err := json.Unmarshal(respBody, &body); err != nil {
+		t.Fatalf("error parsing response body: %v", err)
+	}
+	if body.Result == nil || len(body.Result.Content) == 0 {
+		t.Logf("Response body: %s", string(respBody))
+		t.Fatalf("expected result content")
+	}
+	result := body.Result.Content[0].Text
+	ok := true
 	if !ok {
 		t.Fatalf("expected result to be string")
 	}
@@ -321,7 +355,8 @@ func invokeQueryTool(t *testing.T, requestBody string) string {
 
 func runAuthListLogNamesTest(t *testing.T, expectedLogName string) {
 	t.Run("auth-list-log-names", func(t *testing.T) {
-		resp, _ := tests.RunRequest(t, http.MethodPost, "http://127.0.0.1:5000/api/tool/auth-list-log-names/invoke", bytes.NewBuffer([]byte(`{}`)), nil)
+		payload := `{"jsonrpc":"2.0","id":"1","method":"tools/call","params":{"name":"auth-list-log-names","arguments":{}}}`
+		resp, _ := tests.RunRequest(t, http.MethodPost, "http://127.0.0.1:5000/mcp", bytes.NewBuffer([]byte(payload)), nil)
 		if resp.StatusCode != 401 {
 			t.Fatalf("expected status 401 (Unauthorized), got %d", resp.StatusCode)
 		}
@@ -331,7 +366,8 @@ func runAuthListLogNamesTest(t *testing.T, expectedLogName string) {
 func runQueryLogsErrorTest(t *testing.T) {
 	t.Run("query-logs-error", func(t *testing.T) {
 		requestBody := `{"filter": "INVALID_FILTER_SYNTAX :::", "limit": 10}`
-		resp, _ := tests.RunRequest(t, http.MethodPost, "http://127.0.0.1:5000/api/tool/query-logs/invoke", bytes.NewBuffer([]byte(requestBody)), nil)
+		payload := fmt.Sprintf(`{"jsonrpc":"2.0","id":"1","method":"tools/call","params":{"name":"query-logs","arguments":%s}}`, requestBody)
+		resp, _ := tests.RunRequest(t, http.MethodPost, "http://127.0.0.1:5000/mcp", bytes.NewBuffer([]byte(payload)), nil)
 		if resp.StatusCode != 200 {
 			t.Errorf("expected 200 OK")
 		}
