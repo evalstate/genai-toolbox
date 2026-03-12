@@ -12,23 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: "CF: Deploy Docs Preview"
-
-on:
-  workflow_run:
-    workflows: ["CF: Build Docs Preview"]
-    types:
-      - completed
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: 'PR Number to deploy (Manual override)'
-        required: true
-        type: string
-      build_run_id:
-        description: 'The Run ID from the successful "CF: Build Docs Preview" workflow'
-        required: true
-        type: string
+name: "CF: Deploy PR Preview"
 
 permissions:
   contents: read
