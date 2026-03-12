@@ -74,15 +74,15 @@ jobs:
           command: pages deploy downloaded-artifact/public --project-name toolbox-docs --branch pr-${{ steps.get_pr.outputs.pr_number }}
 
       - name: Comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
-            const prNumber = parseInt('${{ steps.get_pr.outputs.get_pr.outputs.pr_number }}', 10);
+            const prNumber = parseInt('${{ steps.get_pr.outputs.pr_number }}', 10);
             const deployUrl = '${{ steps.cf_deploy.outputs.pages-deployment-alias-url }}';
 
             await github.rest.issues.createComment({
-              issue_number: parseInt('${{ steps.get_pr.outputs.pr_number }}', 10),
+              issue_number: prNumber,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🚀 **Cloudflare Preview Ready!**\n\n🔎 View Preview: ${deployUrl}\n\n*Built from commit ${context.payload.workflow_run ? context.payload.workflow_run.head_sha : 'manual trigger'}*`
+              body: `🚀 **Cloudflare Preview Ready!**\n\n🔎 View Preview: ${deployUrl}\n\n*(Note: It may take a minute or two for Cloudflare to finish deploying the branch)*`
             });
