@@ -68,7 +68,7 @@ tools:
 
 	args := []string{
 		"skills-generate",
-		"--tools-file", toolsFilePath,
+		"--config", toolsFilePath,
 		"--output-dir", outputDir,
 		"--name", "hello-sqlite",
 		"--description", "hello tool",
@@ -176,11 +176,11 @@ func TestGenerateSkill_MissingArguments(t *testing.T) {
 	}{
 		{
 			name: "missing name",
-			args: []string{"skills-generate", "--tools-file", toolsFilePath, "--description", "test"},
+			args: []string{"skills-generate", "--config", toolsFilePath, "--description", "test"},
 		},
 		{
 			name: "missing description",
-			args: []string{"skills-generate", "--tools-file", toolsFilePath, "--name", "test"},
+			args: []string{"skills-generate", "--config", toolsFilePath, "--name", "test"},
 		},
 	}
 

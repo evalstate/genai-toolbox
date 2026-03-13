@@ -85,7 +85,7 @@ func TestParseEnv(t *testing.T) {
 					t.Setenv(k, v)
 				}
 			}
-			parser := &ToolsFileParser{}
+			parser := &ConfigParser{}
 			got, err := parser.parseEnv(tc.in)
 			if tc.err {
 				if err == nil {
@@ -102,7 +102,7 @@ func TestParseEnv(t *testing.T) {
 	}
 }
 
-func TestConvertToolsFile(t *testing.T) {
+func TestConvertConfig(t *testing.T) {
 	tcs := []struct {
 		desc   string
 		in     string
@@ -521,7 +521,7 @@ tools:
 	}
 	for _, tc := range tcs {
 		t.Run(tc.desc, func(t *testing.T) {
-			output, err := convertToolsFile([]byte(tc.in))
+			output, err := convertConfig([]byte(tc.in))
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
 			}
@@ -539,9 +539,9 @@ func TestParseToolFile(t *testing.T) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	tcs := []struct {
-		description   string
-		in            string
-		wantToolsFile ToolsFile
+		description string
+		in          string
+		wantConfig  Config
 	}{
 		{
 			description: "basic example tools file v1",
@@ -570,7 +570,7 @@ func TestParseToolFile(t *testing.T) {
 				example_toolset:
 					- example_tool
 			`,
-			wantToolsFile: ToolsFile{
+			wantConfig: Config{
 				Sources: server.SourceConfigs{
 					"my-pg-instance": cloudsqlpgsrc.Config{
 						Name:     "my-pg-instance",
@@ -658,7 +658,7 @@ func TestParseToolFile(t *testing.T) {
 			- name: code
 			  description: the code to review
 			`,
-			wantToolsFile: ToolsFile{
+			wantConfig: Config{
 				Sources: server.SourceConfigs{
 					"my-pg-instance": cloudsqlpgsrc.Config{
 						Name:     "my-pg-instance",
@@ -733,7 +733,7 @@ func TestParseToolFile(t *testing.T) {
             messages:
                 - content: Analyze the data for {{.country}}.
             `,
-			wantToolsFile: ToolsFile{
+			wantConfig: Config{
 				Sources:      nil,
 				AuthServices: nil,
 				Tools:        nil,
@@ -755,24 +755,24 @@ func TestParseToolFile(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.description, func(t *testing.T) {
-			parser := ToolsFileParser{}
-			toolsFile, err := parser.ParseToolsFile(ctx, testutils.FormatYaml(tc.in))
+			parser := ConfigParser{}
+			toolsFile, err := parser.ParseConfig(ctx, testutils.FormatYaml(tc.in))
 			if err != nil {
 				t.Fatalf("failed to parse input: %v", err)
 			}
-			if diff := cmp.Diff(tc.wantToolsFile.Sources, toolsFile.Sources); diff != "" {
+			if diff := cmp.Diff(tc.wantConfig.Sources, toolsFile.Sources); diff != "" {
 				t.Fatalf("incorrect sources parse: diff %v", diff)
 			}
-			if diff := cmp.Diff(tc.wantToolsFile.AuthServices, toolsFile.AuthServices); diff != "" {
+			if diff := cmp.Diff(tc.wantConfig.AuthServices, toolsFile.AuthServices); diff != "" {
 				t.Fatalf("incorrect authServices parse: diff %v", diff)
 			}
-			if diff := cmp.Diff(tc.wantToolsFile.Tools, toolsFile.Tools); diff != "" {
+			if diff := cmp.Diff(tc.wantConfig.Tools, toolsFile.Tools); diff != "" {
 				t.Fatalf("incorrect tools parse: diff %v", diff)
 			}
-			if diff := cmp.Diff(tc.wantToolsFile.Toolsets, toolsFile.Toolsets); diff != "" {
+			if diff := cmp.Diff(tc.wantConfig.Toolsets, toolsFile.Toolsets); diff != "" {
 				t.Fatalf("incorrect toolsets parse: diff %v", diff)
 			}
-			if diff := cmp.Diff(tc.wantToolsFile.Prompts, toolsFile.Prompts); diff != "" {
+			if diff := cmp.Diff(tc.wantConfig.Prompts, toolsFile.Prompts); diff != "" {
 				t.Fatalf("incorrect prompts parse: diff %v", diff)
 			}
 		})
@@ -785,9 +785,9 @@ func TestParseToolFileWithAuth(t *testing.T) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	tcs := []struct {
-		description   string
-		in            string
-		wantToolsFile ToolsFile
+		description string
+		in          string
+		wantConfig  Config
 	}{
 		{
 			description: "basic example",
@@ -843,7 +843,7 @@ func TestParseToolFileWithAuth(t *testing.T) {
 			tools:
 				- example_tool
 			`,
-			wantToolsFile: ToolsFile{
+			wantConfig: Config{
 				Sources: server.SourceConfigs{
 					"my-pg-instance": cloudsqlpgsrc.Config{
 						Name:     "my-pg-instance",
@@ -943,7 +943,7 @@ func TestParseToolFileWithAuth(t *testing.T) {
 				example_toolset:
 					- example_tool
 			`,
-			wantToolsFile: ToolsFile{
+			wantConfig: Config{
 				Sources: server.SourceConfigs{
 					"my-pg-instance": cloudsqlpgsrc.Config{
 						Name:     "my-pg-instance",
@@ -1049,7 +1049,7 @@ func TestParseToolFileWithAuth(t *testing.T) {
 			tools:
 				- example_tool
 			`,
-			wantToolsFile: ToolsFile{
+			wantConfig: Config{
 				Sources: server.SourceConfigs{
 					"my-pg-instance": cloudsqlpgsrc.Config{
 						Name:     "my-pg-instance",
@@ -1102,24 +1102,24 @@ func TestParseToolFileWithAuth(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.description, func(t *testing.T) {
-			parser := ToolsFileParser{}
-			toolsFile, err := parser.ParseToolsFile(ctx, testutils.FormatYaml(tc.in))
+			parser := ConfigParser{}
+			toolsFile, err := parser.ParseConfig(ctx, testutils.FormatYaml(tc.in))
 			if err != nil {
 				t.Fatalf("failed to parse input: %v", err)
 			}
-			if diff := cmp.Diff(tc.wantToolsFile.Sources, toolsFile.Sources); diff != "" {
+			if diff := cmp.Diff(tc.wantConfig.Sources, toolsFile.Sources); diff != "" {
 				t.Fatalf("incorrect sources parse: diff %v", diff)
 			}
-			if diff := cmp.Diff(tc.wantToolsFile.AuthServices, toolsFile.AuthServices); diff != "" {
+			if diff := cmp.Diff(tc.wantConfig.AuthServices, toolsFile.AuthServices); diff != "" {
 				t.Fatalf("incorrect authServices parse: diff %v", diff)
 			}
-			if diff := cmp.Diff(tc.wantToolsFile.Tools, toolsFile.Tools); diff != "" {
+			if diff := cmp.Diff(tc.wantConfig.Tools, toolsFile.Tools); diff != "" {
 				t.Fatalf("incorrect tools parse: diff %v", diff)
 			}
-			if diff := cmp.Diff(tc.wantToolsFile.Toolsets, toolsFile.Toolsets); diff != "" {
+			if diff := cmp.Diff(tc.wantConfig.Toolsets, toolsFile.Toolsets); diff != "" {
 				t.Fatalf("incorrect toolsets parse: diff %v", diff)
 			}
-			if diff := cmp.Diff(tc.wantToolsFile.Prompts, toolsFile.Prompts); diff != "" {
+			if diff := cmp.Diff(tc.wantConfig.Prompts, toolsFile.Prompts); diff != "" {
 				t.Fatalf("incorrect prompts parse: diff %v", diff)
 			}
 		})
@@ -1144,9 +1144,9 @@ func TestEnvVarReplacement(t *testing.T) {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	tcs := []struct {
-		description   string
-		in            string
-		wantToolsFile ToolsFile
+		description string
+		in          string
+		wantConfig  Config
 	}{
 		{
 			description: "file with env var example",
@@ -1221,7 +1221,7 @@ func TestEnvVarReplacement(t *testing.T) {
 						- role: user
 						  content: ${prompt_content}
 			`,
-			wantToolsFile: ToolsFile{
+			wantConfig: Config{
 				Sources: server.SourceConfigs{
 					"my-http-instance": httpsrc.Config{
 						Name:           "my-http-instance",
@@ -1367,7 +1367,7 @@ func TestEnvVarReplacement(t *testing.T) {
 				- role: user
 					content: ${prompt_content}
 			`,
-			wantToolsFile: ToolsFile{
+			wantConfig: Config{
 				Sources: server.SourceConfigs{
 					"my-http-instance": httpsrc.Config{
 						Name:           "my-http-instance",
@@ -1440,24 +1440,24 @@ func TestEnvVarReplacement(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.description, func(t *testing.T) {
-			parser := ToolsFileParser{}
-			toolsFile, err := parser.ParseToolsFile(ctx, testutils.FormatYaml(tc.in))
+			parser := ConfigParser{}
+			toolsFile, err := parser.ParseConfig(ctx, testutils.FormatYaml(tc.in))
 			if err != nil {
 				t.Fatalf("failed to parse input: %v", err)
 			}
-			if diff := cmp.Diff(tc.wantToolsFile.Sources, toolsFile.Sources); diff != "" {
+			if diff := cmp.Diff(tc.wantConfig.Sources, toolsFile.Sources); diff != "" {
 				t.Fatalf("incorrect sources parse: diff %v", diff)
 			}
-			if diff := cmp.Diff(tc.wantToolsFile.AuthServices, toolsFile.AuthServices); diff != "" {
+			if diff := cmp.Diff(tc.wantConfig.AuthServices, toolsFile.AuthServices); diff != "" {
 				t.Fatalf("incorrect authServices parse: diff %v", diff)
 			}
-			if diff := cmp.Diff(tc.wantToolsFile.Tools, toolsFile.Tools); diff != "" {
+			if diff := cmp.Diff(tc.wantConfig.Tools, toolsFile.Tools); diff != "" {
 				t.Fatalf("incorrect tools parse: diff %v", diff)
 			}
-			if diff := cmp.Diff(tc.wantToolsFile.Toolsets, toolsFile.Toolsets); diff != "" {
+			if diff := cmp.Diff(tc.wantConfig.Toolsets, toolsFile.Toolsets); diff != "" {
 				t.Fatalf("incorrect toolsets parse: diff %v", diff)
 			}
-			if diff := cmp.Diff(tc.wantToolsFile.Prompts, toolsFile.Prompts); diff != "" {
+			if diff := cmp.Diff(tc.wantConfig.Prompts, toolsFile.Prompts); diff != "" {
 				t.Fatalf("incorrect prompts parse: diff %v", diff)
 			}
 		})
@@ -1962,8 +1962,8 @@ func TestPrebuiltTools(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			parser := ToolsFileParser{}
-			toolsFile, err := parser.ParseToolsFile(ctx, tc.in)
+			parser := ConfigParser{}
+			toolsFile, err := parser.ParseConfig(ctx, tc.in)
 			if err != nil {
 				t.Fatalf("failed to parse input: %v", err)
 			}
@@ -1986,33 +1986,33 @@ func TestPrebuiltTools(t *testing.T) {
 	}
 }
 
-func TestMergeToolsFiles(t *testing.T) {
-	file1 := ToolsFile{
+func TestMergeConfigs(t *testing.T) {
+	file1 := Config{
 		Sources:         server.SourceConfigs{"source1": httpsrc.Config{Name: "source1"}},
 		Tools:           server.ToolConfigs{"tool1": http.Config{Name: "tool1"}},
 		Toolsets:        server.ToolsetConfigs{"set1": tools.ToolsetConfig{Name: "set1"}},
 		EmbeddingModels: server.EmbeddingModelConfigs{"model1": gemini.Config{Name: "gemini-text"}},
 	}
-	file2 := ToolsFile{
+	file2 := Config{
 		AuthServices: server.AuthServiceConfigs{"auth1": google.Config{Name: "auth1"}},
 		Tools:        server.ToolConfigs{"tool2": http.Config{Name: "tool2"}},
 		Toolsets:     server.ToolsetConfigs{"set2": tools.ToolsetConfig{Name: "set2"}},
 	}
-	fileWithConflicts := ToolsFile{
+	fileWithConflicts := Config{
 		Sources: server.SourceConfigs{"source1": httpsrc.Config{Name: "source1"}},
 		Tools:   server.ToolConfigs{"tool2": http.Config{Name: "tool2"}},
 	}
 
 	testCases := []struct {
 		name    string
-		files   []ToolsFile
-		want    ToolsFile
+		files   []Config
+		want    Config
 		wantErr bool
 	}{
 		{
 			name:  "merge two distinct files",
-			files: []ToolsFile{file1, file2},
-			want: ToolsFile{
+			files: []Config{file1, file2},
+			want: Config{
 				Sources:         server.SourceConfigs{"source1": httpsrc.Config{Name: "source1"}},
 				AuthServices:    server.AuthServiceConfigs{"auth1": google.Config{Name: "auth1"}},
 				Tools:           server.ToolConfigs{"tool1": http.Config{Name: "tool1"}, "tool2": http.Config{Name: "tool2"}},
@@ -2024,13 +2024,13 @@ func TestMergeToolsFiles(t *testing.T) {
 		},
 		{
 			name:    "merge with conflicts",
-			files:   []ToolsFile{file1, file2, fileWithConflicts},
+			files:   []Config{file1, file2, fileWithConflicts},
 			wantErr: true,
 		},
 		{
 			name:  "merge single file",
-			files: []ToolsFile{file1},
-			want: ToolsFile{
+			files: []Config{file1},
+			want: Config{
 				Sources:         file1.Sources,
 				AuthServices:    make(server.AuthServiceConfigs),
 				EmbeddingModels: server.EmbeddingModelConfigs{"model1": gemini.Config{Name: "gemini-text"}},
@@ -2041,8 +2041,8 @@ func TestMergeToolsFiles(t *testing.T) {
 		},
 		{
 			name:  "merge empty list",
-			files: []ToolsFile{},
-			want: ToolsFile{
+			files: []Config{},
+			want: Config{
 				Sources:         make(server.SourceConfigs),
 				AuthServices:    make(server.AuthServiceConfigs),
 				EmbeddingModels: make(server.EmbeddingModelConfigs),
@@ -2055,13 +2055,13 @@ func TestMergeToolsFiles(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := mergeToolsFiles(tc.files...)
+			got, err := mergeConfigs(tc.files...)
 			if (err != nil) != tc.wantErr {
-				t.Fatalf("mergeToolsFiles() error = %v, wantErr %v", err, tc.wantErr)
+				t.Fatalf("mergeConfigs() error = %v, wantErr %v", err, tc.wantErr)
 			}
 			if !tc.wantErr {
 				if diff := cmp.Diff(tc.want, got); diff != "" {
-					t.Errorf("mergeToolsFiles() mismatch (-want +got):\n%s", diff)
+					t.Errorf("mergeConfigs() mismatch (-want +got):\n%s", diff)
 				}
 			} else {
 				if err == nil {
@@ -2168,8 +2168,8 @@ tools:
 		t.Run(tc.desc, func(t *testing.T) {
 			// Indent parameters to match YAML structure
 			yamlContent := fmt.Sprintf(baseYaml, tc.params)
-			parser := ToolsFileParser{}
-			_, err := parser.ParseToolsFile(ctx, []byte(yamlContent))
+			parser := ConfigParser{}
+			_, err := parser.ParseConfig(ctx, []byte(yamlContent))
 
 			if tc.wantErr {
 				if err == nil {

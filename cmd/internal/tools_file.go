@@ -30,7 +30,7 @@ import (
 	"github.com/googleapis/genai-toolbox/internal/server"
 )
 
-type ToolsFile struct {
+type Config struct {
 	Sources         server.SourceConfigs         `yaml:"sources"`
 	AuthServices    server.AuthServiceConfigs    `yaml:"authServices"`
 	EmbeddingModels server.EmbeddingModelConfigs `yaml:"embeddingModels"`
@@ -39,13 +39,13 @@ type ToolsFile struct {
 	Prompts         server.PromptConfigs         `yaml:"prompts"`
 }
 
-type ToolsFileParser struct {
+type ConfigParser struct {
 	EnvVars map[string]string
 }
 
 // parseEnv replaces environment variables ${ENV_NAME} with their values.
 // also support ${ENV_NAME:default_value}.
-func (p *ToolsFileParser) parseEnv(input string) (string, error) {
+func (p *ConfigParser) parseEnv(input string) (string, error) {
 	re := regexp.MustCompile(`\$\{(\w+)(:([^}]*))?\}`)
 
 	if p.EnvVars == nil {
@@ -73,9 +73,9 @@ func (p *ToolsFileParser) parseEnv(input string) (string, error) {
 	return output, err
 }
 
-// ParseToolsFile parses the provided yaml into appropriate configs.
-func (p *ToolsFileParser) ParseToolsFile(ctx context.Context, raw []byte) (ToolsFile, error) {
-	var toolsFile ToolsFile
+// ParseConfig parses the provided yaml into appropriate configs.
+func (p *ConfigParser) ParseConfig(ctx context.Context, raw []byte) (Config, error) {
+	var toolsFile Config
 	// Replace environment variables if found
 	output, err := p.parseEnv(string(raw))
 	if err != nil {
@@ -83,7 +83,7 @@ func (p *ToolsFileParser) ParseToolsFile(ctx context.Context, raw []byte) (Tools
 	}
 	raw = []byte(output)
 
-	raw, err = convertToolsFile(raw)
+	raw, err = convertConfig(raw)
 	if err != nil {
 		return toolsFile, fmt.Errorf("error converting tools file: %s", err)
 	}
@@ -96,7 +96,7 @@ func (p *ToolsFileParser) ParseToolsFile(ctx context.Context, raw []byte) (Tools
 	return toolsFile, nil
 }
 
-func convertToolsFile(raw []byte) ([]byte, error) {
+func convertConfig(raw []byte) ([]byte, error) {
 	var input yaml.MapSlice
 	decoder := yaml.NewDecoder(bytes.NewReader(raw), yaml.UseOrderedMap())
 
@@ -219,11 +219,11 @@ func processValue(v any, isToolset bool) any {
 	}
 }
 
-// mergeToolsFiles merges multiple ToolsFile structs into one.
+// mergeConfigs merges multiple Config structs into one.
 // Detects and raises errors for resource conflicts in sources, authServices, tools, and toolsets.
 // All resource names (sources, authServices, tools, toolsets) must be unique across all files.
-func mergeToolsFiles(files ...ToolsFile) (ToolsFile, error) {
-	merged := ToolsFile{
+func mergeConfigs(files ...Config) (Config, error) {
+	merged := Config{
 		Sources:         make(server.SourceConfigs),
 		AuthServices:    make(server.AuthServiceConfigs),
 		EmbeddingModels: make(server.EmbeddingModelConfigs),
@@ -294,70 +294,70 @@ func mergeToolsFiles(files ...ToolsFile) (ToolsFile, error) {
 
 	// If conflicts were detected, return an error
 	if len(conflicts) > 0 {
-		return ToolsFile{}, fmt.Errorf("resource conflicts detected:\n  - %s\n\nPlease ensure each source, authService, tool, toolset and prompt has a unique name across all files", strings.Join(conflicts, "\n  - "))
+		return Config{}, fmt.Errorf("resource conflicts detected:\n  - %s\n\nPlease ensure each source, authService, tool, toolset and prompt has a unique name across all files", strings.Join(conflicts, "\n  - "))
 	}
 
 	return merged, nil
 }
 
-// LoadAndMergeToolsFiles loads multiple YAML files and merges them
-func (p *ToolsFileParser) LoadAndMergeToolsFiles(ctx context.Context, filePaths []string) (ToolsFile, error) {
-	var toolsFiles []ToolsFile
+// LoadAndMergeConfigs loads multiple YAML files and merges them
+func (p *ConfigParser) LoadAndMergeConfigs(ctx context.Context, filePaths []string) (Config, error) {
+	var toolsFiles []Config
 
 	for _, filePath := range filePaths {
 		buf, err := os.ReadFile(filePath)
 		if err != nil {
-			return ToolsFile{}, fmt.Errorf("unable to read tool file at %q: %w", filePath, err)
+			return Config{}, fmt.Errorf("unable to read tool file at %q: %w", filePath, err)
 		}
 
-		toolsFile, err := p.ParseToolsFile(ctx, buf)
+		toolsFile, err := p.ParseConfig(ctx, buf)
 		if err != nil {
-			return ToolsFile{}, fmt.Errorf("unable to parse tool file at %q: %w", filePath, err)
+			return Config{}, fmt.Errorf("unable to parse tool file at %q: %w", filePath, err)
 		}
 
 		toolsFiles = append(toolsFiles, toolsFile)
 	}
 
-	mergedFile, err := mergeToolsFiles(toolsFiles...)
+	mergedFile, err := mergeConfigs(toolsFiles...)
 	if err != nil {
-		return ToolsFile{}, fmt.Errorf("unable to merge tools files: %w", err)
+		return Config{}, fmt.Errorf("unable to merge tools files: %w", err)
 	}
 
 	return mergedFile, nil
 }
 
-// LoadAndMergeToolsFolder loads all YAML files from a directory and merges them
-func (p *ToolsFileParser) LoadAndMergeToolsFolder(ctx context.Context, folderPath string) (ToolsFile, error) {
+// LoadAndMergeConfigFolder loads all YAML files from a directory and merges them
+func (p *ConfigParser) LoadAndMergeConfigFolder(ctx context.Context, folderPath string) (Config, error) {
 	// Check if directory exists
 	info, err := os.Stat(folderPath)
 	if err != nil {
-		return ToolsFile{}, fmt.Errorf("unable to access tools folder at %q: %w", folderPath, err)
+		return Config{}, fmt.Errorf("unable to access tools folder at %q: %w", folderPath, err)
 	}
 	if !info.IsDir() {
-		return ToolsFile{}, fmt.Errorf("path %q is not a directory", folderPath)
+		return Config{}, fmt.Errorf("path %q is not a directory", folderPath)
 	}
 
 	// Find all YAML files in the directory
 	pattern := filepath.Join(folderPath, "*.yaml")
 	yamlFiles, err := filepath.Glob(pattern)
 	if err != nil {
-		return ToolsFile{}, fmt.Errorf("error finding YAML files in %q: %w", folderPath, err)
+		return Config{}, fmt.Errorf("error finding YAML files in %q: %w", folderPath, err)
 	}
 
 	// Also find .yml files
 	ymlPattern := filepath.Join(folderPath, "*.yml")
 	ymlFiles, err := filepath.Glob(ymlPattern)
 	if err != nil {
-		return ToolsFile{}, fmt.Errorf("error finding YML files in %q: %w", folderPath, err)
+		return Config{}, fmt.Errorf("error finding YML files in %q: %w", folderPath, err)
 	}
 
 	// Combine both file lists
 	allFiles := append(yamlFiles, ymlFiles...)
 
 	if len(allFiles) == 0 {
-		return ToolsFile{}, fmt.Errorf("no YAML files found in directory %q", folderPath)
+		return Config{}, fmt.Errorf("no YAML files found in directory %q", folderPath)
 	}
 
-	// Use existing LoadAndMergeToolsFiles function
-	return p.LoadAndMergeToolsFiles(ctx, allFiles)
+	// Use existing LoadAndMergeConfigs function
+	return p.LoadAndMergeConfigs(ctx, allFiles)
 }
