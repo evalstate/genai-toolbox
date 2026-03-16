@@ -311,9 +311,16 @@ func runAlloyDBListClustersTest(t *testing.T, vars map[string]string) {
 	}
 
 	type ToolResponse struct {
-		Result string `json:"result"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+		Result *struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError bool `json:"isError"`
+		} `json:"result"`
 	}
-
 	// NOTE: If clusters are added, removed or changed in the test project,
 	// this list must be updated for the "list clusters specific locations" test to pass
 	wantForSpecificLocation := []string{
@@ -335,6 +342,7 @@ func runAlloyDBListClustersTest(t *testing.T, vars map[string]string) {
 		requestBody    io.Reader
 		want           []string
 		wantStatusCode int
+		expectAgentErr bool
 	}{
 		{
 			name:           "list clusters for all locations",
@@ -352,6 +360,7 @@ func runAlloyDBListClustersTest(t *testing.T, vars map[string]string) {
 			name:           "list clusters missing project",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"location": "%s"}`, vars["location"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 		{
 			name:           "list clusters non-existent location",
@@ -367,11 +376,13 @@ func runAlloyDBListClustersTest(t *testing.T, vars map[string]string) {
 			name:           "list clusters empty project",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"project": "", "location": "%s"}`, vars["location"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 		{
 			name:           "list clusters empty location",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"project": "%s", "location": ""}`, vars["project"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 	}
 
@@ -410,21 +421,45 @@ func runAlloyDBListClustersTest(t *testing.T, vars map[string]string) {
 					t.Fatalf("error parsing outer response body: %v", err)
 				}
 
-				var clustersData ListClustersResponse
-				if err := json.Unmarshal([]byte(body.Result), &clustersData); err != nil {
-					t.Fatalf("error parsing nested result JSON: %v", err)
-				}
+				if tc.expectAgentErr {
+					gotText := ""
+					if body.Error != nil {
+						gotText = body.Error.Message
+					} else if body.Result != nil && len(body.Result.Content) > 0 {
+						gotText = body.Result.Content[0].Text
+					}
 
-				var got []string
-				for _, cluster := range clustersData.Clusters {
-					got = append(got, cluster.Name)
-				}
+					if gotText == "" {
+						t.Fatalf("expected error response, but got none")
+					}
+				} else {
+					if body.Error != nil {
+						t.Fatalf("MCP error: %s", body.Error.Message)
+					}
+					if body.Result != nil && body.Result.IsError {
+						t.Fatalf("MCP result error")
+					}
 
-				sort.Strings(got)
-				sort.Strings(tc.want)
+					if body.Result == nil || len(body.Result.Content) == 0 {
+						t.Fatalf("empty MCP result")
+					}
 
-				if !reflect.DeepEqual(got, tc.want) {
-					t.Errorf("cluster list mismatch:\n got: %v\nwant: %v", got, tc.want)
+					var clustersData ListClustersResponse
+					if err := json.Unmarshal([]byte(body.Result.Content[0].Text), &clustersData); err != nil {
+						t.Fatalf("error parsing nested result JSON: %v", err)
+					}
+
+					var got []string
+					for _, cluster := range clustersData.Clusters {
+						got = append(got, cluster.Name)
+					}
+
+					sort.Strings(got)
+					sort.Strings(tc.want)
+
+					if !reflect.DeepEqual(got, tc.want) {
+						t.Errorf("cluster list mismatch:\n got: %v\nwant: %v", got, tc.want)
+					}
 				}
 			}
 		})
@@ -439,9 +474,16 @@ func runAlloyDBListUsersTest(t *testing.T, vars map[string]string) {
 	}
 
 	type ToolResponse struct {
-		Result string `json:"result"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+		Result *struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError bool `json:"isError"`
+		} `json:"result"`
 	}
-
 	invokeTcs := []struct {
 		name           string
 		requestBody    io.Reader
@@ -460,21 +502,21 @@ func runAlloyDBListUsersTest(t *testing.T, vars map[string]string) {
 			name:           "list users missing project",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"location": "%s", "cluster": "%s"}`, vars["location"], vars["cluster"])),
 			wantStatusCode: http.StatusOK,
-			wantContains:   `parameter \"project\" is required`,
+			wantContains:   `parameter "project" is required`,
 			expectAgentErr: true,
 		},
 		{
 			name:           "list users missing location",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"project": "%s", "cluster": "%s"}`, vars["project"], vars["cluster"])),
 			wantStatusCode: http.StatusOK,
-			wantContains:   `parameter \"location\" is required`,
+			wantContains:   `parameter "location" is required`,
 			expectAgentErr: true,
 		},
 		{
 			name:           "list users missing cluster",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"project": "%s", "location": "%s"}`, vars["project"], vars["cluster"])),
 			wantStatusCode: http.StatusOK,
-			wantContains:   `parameter \"cluster\" is required`,
+			wantContains:   `parameter "cluster" is required`,
 			expectAgentErr: true,
 		},
 		{
@@ -521,15 +563,25 @@ func runAlloyDBListUsersTest(t *testing.T, vars map[string]string) {
 				}
 
 				if tc.expectAgentErr {
-					// Logic for checking wrapped error messages
-					if !strings.Contains(body.Result, tc.wantContains) {
-						t.Errorf("expected agent error message not found:\n got: %s\nwant: %s", body.Result, tc.wantContains)
+					gotText := ""
+					if body.Error != nil {
+						gotText = body.Error.Message
+					} else if body.Result != nil && len(body.Result.Content) > 0 {
+						gotText = body.Result.Content[0].Text
+					}
+
+					if gotText == "" {
+						t.Fatalf("expected error response, but got none")
+					}
+
+					if tc.wantContains != "" && !strings.Contains(gotText, tc.wantContains) {
+						t.Errorf("expected agent error message not found:\n got: %s\nwant: %s", gotText, tc.wantContains)
 					}
 				} else {
 					// Logic for checking successful resource lists
 					var usersData UsersResponse
-					if err := json.Unmarshal([]byte(body.Result), &usersData); err != nil {
-						t.Fatalf("error parsing nested result JSON: %v. Result was: %s", err, body.Result)
+					if err := json.Unmarshal([]byte(body.Result.Content[0].Text), &usersData); err != nil {
+						t.Fatalf("error parsing nested result JSON: %v. Result was: %s", err, body.Result.Content[0].Text)
 					}
 
 					found := false
@@ -556,9 +608,16 @@ func runAlloyDBListInstancesTest(t *testing.T, vars map[string]string) {
 	}
 
 	type ToolResponse struct {
-		Result string `json:"result"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+		Result *struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError bool `json:"isError"`
+		} `json:"result"`
 	}
-
 	wantForSpecificClusterAndLocation := []string{
 		fmt.Sprintf("projects/%s/locations/%s/clusters/%s/instances/%s", vars["project"], vars["location"], vars["cluster"], vars["instance"]),
 	}
@@ -582,6 +641,7 @@ func runAlloyDBListInstancesTest(t *testing.T, vars map[string]string) {
 		requestBody    io.Reader
 		want           []string
 		wantStatusCode int
+		expectAgentErr bool
 	}{
 		{
 			name:           "list instances for a specific cluster and location",
@@ -605,6 +665,7 @@ func runAlloyDBListInstancesTest(t *testing.T, vars map[string]string) {
 			name:           "list instances missing project",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"location": "%s", "cluster": "%s"}`, vars["location"], vars["cluster"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 		{
 			name:           "list instances non-existent project",
@@ -620,6 +681,7 @@ func runAlloyDBListInstancesTest(t *testing.T, vars map[string]string) {
 			name:           "list instances non-existent cluster",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"project": "%s", "location": "%s", "cluster": "non-existent-cluster"}`, vars["project"], vars["location"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 	}
 
@@ -658,21 +720,45 @@ func runAlloyDBListInstancesTest(t *testing.T, vars map[string]string) {
 					t.Fatalf("error parsing outer response body: %v", err)
 				}
 
-				var instancesData ListInstancesResponse
-				if err := json.Unmarshal([]byte(body.Result), &instancesData); err != nil {
-					t.Fatalf("error parsing nested result JSON: %v", err)
-				}
+				if tc.expectAgentErr {
+					gotText := ""
+					if body.Error != nil {
+						gotText = body.Error.Message
+					} else if body.Result != nil && len(body.Result.Content) > 0 {
+						gotText = body.Result.Content[0].Text
+					}
 
-				var got []string
-				for _, instance := range instancesData.Instances {
-					got = append(got, instance.Name)
-				}
+					if gotText == "" {
+						t.Fatalf("expected error response, but got none")
+					}
+				} else {
+					if body.Error != nil {
+						t.Fatalf("MCP error: %s", body.Error.Message)
+					}
+					if body.Result != nil && body.Result.IsError {
+						t.Fatalf("MCP result error")
+					}
 
-				sort.Strings(got)
-				sort.Strings(tc.want)
+					if body.Result == nil || len(body.Result.Content) == 0 {
+						t.Fatalf("empty MCP result")
+					}
 
-				if !reflect.DeepEqual(got, tc.want) {
-					t.Errorf("instance list mismatch:\n got: %v\nwant: %v", got, tc.want)
+					var instancesData ListInstancesResponse
+					if err := json.Unmarshal([]byte(body.Result.Content[0].Text), &instancesData); err != nil {
+						t.Fatalf("error parsing nested result JSON: %v", err)
+					}
+
+					var got []string
+					for _, instance := range instancesData.Instances {
+						got = append(got, instance.Name)
+					}
+
+					sort.Strings(got)
+					sort.Strings(tc.want)
+
+					if !reflect.DeepEqual(got, tc.want) {
+						t.Errorf("instance list mismatch:\n got: %v\nwant: %v", got, tc.want)
+					}
 				}
 			}
 		})
@@ -681,14 +767,22 @@ func runAlloyDBListInstancesTest(t *testing.T, vars map[string]string) {
 
 func runAlloyDBGetClusterTest(t *testing.T, vars map[string]string) {
 	type ToolResponse struct {
-		Result string `json:"result"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+		Result *struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError bool `json:"isError"`
+		} `json:"result"`
 	}
-
 	invokeTcs := []struct {
 		name           string
 		requestBody    io.Reader
 		want           map[string]any
 		wantStatusCode int
+		expectAgentErr bool
 	}{
 		{
 			name:        "get cluster success",
@@ -703,21 +797,25 @@ func runAlloyDBGetClusterTest(t *testing.T, vars map[string]string) {
 			name:           "get cluster missing project",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"location": "%s", "cluster": "%s"}`, vars["location"], vars["cluster"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 		{
 			name:           "get cluster missing location",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"project": "%s", "cluster": "%s"}`, vars["project"], vars["cluster"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 		{
 			name:           "get cluster missing cluster",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"project": "%s", "location": "%s"}`, vars["project"], vars["location"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 		{
 			name:           "get cluster non-existent cluster",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"project": "%s", "location": "%s", "cluster": "non-existent-cluster"}`, vars["project"], vars["location"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 	}
 
@@ -753,24 +851,48 @@ func runAlloyDBGetClusterTest(t *testing.T, vars map[string]string) {
 			if tc.wantStatusCode == http.StatusOK {
 				var body ToolResponse
 				if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-					t.Fatalf("error parsing response body: %v", err)
+					t.Fatalf("error parsing outer response body: %v", err)
 				}
 
-				if tc.want != nil {
-					var gotMap map[string]any
-					if err := json.Unmarshal([]byte(body.Result), &gotMap); err != nil {
-						t.Fatalf("failed to unmarshal JSON result into map: %v", err)
+				if tc.expectAgentErr {
+					gotText := ""
+					if body.Error != nil {
+						gotText = body.Error.Message
+					} else if body.Result != nil && len(body.Result.Content) > 0 {
+						gotText = body.Result.Content[0].Text
 					}
 
-					got := make(map[string]any)
-					for key := range tc.want {
-						if value, ok := gotMap[key]; ok {
-							got[key] = value
+					if gotText == "" {
+						t.Fatalf("expected error response, but got none")
+					}
+				} else {
+					if body.Error != nil {
+						t.Fatalf("MCP error: %s", body.Error.Message)
+					}
+					if body.Result != nil && body.Result.IsError {
+						t.Fatalf("MCP result error")
+					}
+
+					if body.Result == nil || len(body.Result.Content) == 0 {
+						t.Fatalf("empty MCP result")
+					}
+
+					if tc.want != nil {
+						var gotMap map[string]any
+						if err := json.Unmarshal([]byte(body.Result.Content[0].Text), &gotMap); err != nil {
+							t.Fatalf("failed to unmarshal JSON result into map: %v. Result was: %s", err, body.Result.Content[0].Text)
 						}
-					}
 
-					if diff := cmp.Diff(tc.want, got); diff != "" {
-						t.Errorf("Unexpected result: got %#v, want: %#v", got, tc.want)
+						got := make(map[string]any)
+						for key := range tc.want {
+							if value, ok := gotMap[key]; ok {
+								got[key] = value
+							}
+						}
+
+						if diff := cmp.Diff(tc.want, got); diff != "" {
+							t.Errorf("Unexpected result: got %#v, want: %#v", got, tc.want)
+						}
 					}
 				}
 			}
@@ -780,14 +902,22 @@ func runAlloyDBGetClusterTest(t *testing.T, vars map[string]string) {
 
 func runAlloyDBGetInstanceTest(t *testing.T, vars map[string]string) {
 	type ToolResponse struct {
-		Result string `json:"result"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+		Result *struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError bool `json:"isError"`
+		} `json:"result"`
 	}
-
 	invokeTcs := []struct {
 		name           string
 		requestBody    io.Reader
 		want           map[string]any
 		wantStatusCode int
+		expectAgentErr bool
 	}{
 		{
 			name:        "get instance success",
@@ -802,26 +932,31 @@ func runAlloyDBGetInstanceTest(t *testing.T, vars map[string]string) {
 			name:           "get instance missing project",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"location": "%s", "cluster": "%s", "instance": "%s"}`, vars["location"], vars["cluster"], vars["instance"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 		{
 			name:           "get instance missing location",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"project": "%s", "cluster": "%s", "instance": "%s"}`, vars["project"], vars["cluster"], vars["instance"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 		{
 			name:           "get instance missing cluster",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"project": "%s", "location": "%s", "instance": "%s"}`, vars["project"], vars["location"], vars["instance"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 		{
 			name:           "get instance missing instance",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"project": "%s", "location": "%s", "cluster": "%s"}`, vars["project"], vars["location"], vars["cluster"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 		{
 			name:           "get instance non-existent instance",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"project": "%s", "location": "%s", "cluster": "%s", "instance": "non-existent-instance"}`, vars["project"], vars["location"], vars["cluster"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 	}
 
@@ -857,24 +992,48 @@ func runAlloyDBGetInstanceTest(t *testing.T, vars map[string]string) {
 			if tc.wantStatusCode == http.StatusOK {
 				var body ToolResponse
 				if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-					t.Fatalf("error parsing response body: %v", err)
+					t.Fatalf("error parsing outer response body: %v", err)
 				}
 
-				if tc.want != nil {
-					var gotMap map[string]any
-					if err := json.Unmarshal([]byte(body.Result), &gotMap); err != nil {
-						t.Fatalf("failed to unmarshal JSON result into map: %v", err)
+				if tc.expectAgentErr {
+					gotText := ""
+					if body.Error != nil {
+						gotText = body.Error.Message
+					} else if body.Result != nil && len(body.Result.Content) > 0 {
+						gotText = body.Result.Content[0].Text
 					}
 
-					got := make(map[string]any)
-					for key := range tc.want {
-						if value, ok := gotMap[key]; ok {
-							got[key] = value
+					if gotText == "" {
+						t.Fatalf("expected error response, but got none")
+					}
+				} else {
+					if body.Error != nil {
+						t.Fatalf("MCP error: %s", body.Error.Message)
+					}
+					if body.Result != nil && body.Result.IsError {
+						t.Fatalf("MCP result error")
+					}
+
+					if body.Result == nil || len(body.Result.Content) == 0 {
+						t.Fatalf("empty MCP result")
+					}
+
+					if tc.want != nil {
+						var gotMap map[string]any
+						if err := json.Unmarshal([]byte(body.Result.Content[0].Text), &gotMap); err != nil {
+							t.Fatalf("failed to unmarshal JSON result into map: %v. Result was: %s", err, body.Result.Content[0].Text)
 						}
-					}
 
-					if diff := cmp.Diff(tc.want, got); diff != "" {
-						t.Errorf("Unexpected result: got %#v, want: %#v", got, tc.want)
+						got := make(map[string]any)
+						for key := range tc.want {
+							if value, ok := gotMap[key]; ok {
+								got[key] = value
+							}
+						}
+
+						if diff := cmp.Diff(tc.want, got); diff != "" {
+							t.Errorf("Unexpected result: got %#v, want: %#v", got, tc.want)
+						}
 					}
 				}
 			}
@@ -884,14 +1043,22 @@ func runAlloyDBGetInstanceTest(t *testing.T, vars map[string]string) {
 
 func runAlloyDBGetUserTest(t *testing.T, vars map[string]string) {
 	type ToolResponse struct {
-		Result string `json:"result"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+		Result *struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError bool `json:"isError"`
+		} `json:"result"`
 	}
-
 	invokeTcs := []struct {
 		name           string
 		requestBody    io.Reader
 		want           map[string]any
 		wantStatusCode int
+		expectAgentErr bool
 	}{
 		{
 			name:        "get user success",
@@ -906,26 +1073,31 @@ func runAlloyDBGetUserTest(t *testing.T, vars map[string]string) {
 			name:           "get user missing project",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"location": "%s", "cluster": "%s", "user": "%s"}`, vars["location"], vars["cluster"], vars["user"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 		{
 			name:           "get user missing location",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"project": "%s", "cluster": "%s", "user": "%s"}`, vars["project"], vars["cluster"], vars["user"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 		{
 			name:           "get user missing cluster",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"project": "%s", "location": "%s", "user": "%s"}`, vars["project"], vars["location"], vars["user"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 		{
 			name:           "get user missing user",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"project": "%s", "location": "%s", "cluster": "%s"}`, vars["project"], vars["location"], vars["cluster"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 		{
 			name:           "get non-existent user",
 			requestBody:    bytes.NewBufferString(fmt.Sprintf(`{"project": "%s", "location": "%s", "cluster": "%s", "user": "non-existent-user"}`, vars["project"], vars["location"], vars["cluster"])),
 			wantStatusCode: http.StatusOK,
+			expectAgentErr: true,
 		},
 	}
 
@@ -961,24 +1133,48 @@ func runAlloyDBGetUserTest(t *testing.T, vars map[string]string) {
 			if tc.wantStatusCode == http.StatusOK {
 				var body ToolResponse
 				if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-					t.Fatalf("error parsing response body: %v", err)
+					t.Fatalf("error parsing outer response body: %v", err)
 				}
 
-				if tc.want != nil {
-					var gotMap map[string]any
-					if err := json.Unmarshal([]byte(body.Result), &gotMap); err != nil {
-						t.Fatalf("failed to unmarshal JSON result into map: %v", err)
+				if tc.expectAgentErr {
+					gotText := ""
+					if body.Error != nil {
+						gotText = body.Error.Message
+					} else if body.Result != nil && len(body.Result.Content) > 0 {
+						gotText = body.Result.Content[0].Text
 					}
 
-					got := make(map[string]any)
-					for key := range tc.want {
-						if value, ok := gotMap[key]; ok {
-							got[key] = value
+					if gotText == "" {
+						t.Fatalf("expected error response, but got none")
+					}
+				} else {
+					if body.Error != nil {
+						t.Fatalf("MCP error: %s", body.Error.Message)
+					}
+					if body.Result != nil && body.Result.IsError {
+						t.Fatalf("MCP result error")
+					}
+
+					if body.Result == nil || len(body.Result.Content) == 0 {
+						t.Fatalf("empty MCP result")
+					}
+
+					if tc.want != nil {
+						var gotMap map[string]any
+						if err := json.Unmarshal([]byte(body.Result.Content[0].Text), &gotMap); err != nil {
+							t.Fatalf("failed to unmarshal JSON result into map: %v. Result was: %s", err, body.Result.Content[0].Text)
 						}
-					}
 
-					if diff := cmp.Diff(tc.want, got); diff != "" {
-						t.Errorf("Unexpected result: got %#v, want: %#v", got, tc.want)
+						got := make(map[string]any)
+						for key := range tc.want {
+							if value, ok := gotMap[key]; ok {
+								got[key] = value
+							}
+						}
+
+						if diff := cmp.Diff(tc.want, got); diff != "" {
+							t.Errorf("Unexpected result: got %#v, want: %#v", got, tc.want)
+						}
 					}
 				}
 			}

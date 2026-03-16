@@ -200,7 +200,7 @@ func TestHealthcareToolWithStoreRestriction(t *testing.T) {
 	}
 
 	// Start server
-	cmd, cleanup, err := tests.StartCmd(ctx, config)
+	cmd, cleanup, err := tests.StartCmd(ctx, config, "--port", "5001")
 	if err != nil {
 		t.Fatalf("command initialization returned an error: %s", err)
 	}
@@ -1697,7 +1697,7 @@ func runFHIRFetchPageToolInvokeTest(t *testing.T, pageURL, want string) {
 }
 
 func getNextPageURLForPatientEverything(t *testing.T, fhirStoreID, patientID string) string {
-	api := "http://127.0.0.1:5000/mcp"
+	api := "http://127.0.0.1:5001/mcp"
 	reqArgs := fmt.Sprintf(`{"storeID": "%s", "patientID": "%s"}`, fhirStoreID, patientID)
 	payload := fmt.Sprintf(`{"jsonrpc":"2.0","id":"1","method":"tools/call","params":{"name":"my-fhir-patient-everything-tool","arguments":%s}}`, reqArgs)
 	resp, bodyBytes := tests.RunRequest(t, http.MethodPost, api, bytes.NewBuffer([]byte(payload)), map[string]string{"Content-type": "application/json"})
@@ -1750,7 +1750,7 @@ func getNextPageURLForPatientEverything(t *testing.T, fhirStoreID, patientID str
 }
 
 func runTest(t *testing.T, toolName string, requestHeader map[string]string, requestBody string) (string, int) {
-	api := "http://127.0.0.1:5000/mcp"
+	api := "http://127.0.0.1:5001/mcp"
 	payload := fmt.Sprintf(`{"jsonrpc":"2.0","id":"1","method":"tools/call","params":{"name":"%s","arguments":%s}}`, toolName, requestBody)
 	resp, bodyBytes := tests.RunRequest(t, http.MethodPost, api, bytes.NewBuffer([]byte(payload)), requestHeader)
 	defer resp.Body.Close()
@@ -1768,10 +1768,10 @@ func runTest(t *testing.T, toolName string, requestHeader map[string]string, req
 	if errJSON, ok := body["error"]; ok {
 		if errMap, ok := errJSON.(map[string]interface{}); ok {
 			if errMsg, ok := errMap["message"].(string); ok {
-				return errMsg, http.StatusOK
+				return "error: " + errMsg, http.StatusOK
 			}
 		}
-		return "unknown mcp error", http.StatusOK
+		return "error: unknown mcp error", http.StatusOK
 	}
 
 	resultMap, ok := body["result"].(map[string]interface{})
@@ -1781,13 +1781,25 @@ func runTest(t *testing.T, toolName string, requestHeader map[string]string, req
 
 	contentList, ok := resultMap["content"].([]interface{})
 	if !ok || len(contentList) == 0 {
-		t.Fatalf("unable to find result.content[0] in response body: %v", string(bodyBytes))
+		t.Fatalf("unable to find result.content in response body: %v", string(bodyBytes))
 	}
-	contentItem := contentList[0].(map[string]interface{})
-	got, ok := contentItem["text"].(string)
-	if !ok {
-		t.Fatalf("unable to extract text out of result.content[0]")
+
+	var combined []string
+	for _, item := range contentList {
+		if itemMap, ok := item.(map[string]interface{}); ok {
+			if text, ok := itemMap["text"].(string); ok {
+				combined = append(combined, text)
+			}
+		}
 	}
+
+	got := ""
+	if len(combined) == 1 {
+		got = combined[0]
+	} else if len(combined) > 1 {
+		got = "[" + strings.Join(combined, ",") + "]"
+	}
+
 	return got, http.StatusOK
 }
 

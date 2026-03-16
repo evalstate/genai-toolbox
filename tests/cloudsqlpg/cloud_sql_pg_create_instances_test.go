@@ -180,12 +180,14 @@ func TestCreateInstanceToolEndpoints(t *testing.T) {
 	}
 
 	tcs := []struct {
-		name        string
-		toolName    string
-		body        string
-		want        string
-		expectError bool
-		errorStatus int
+		name           string
+		toolName       string
+		body           string
+		want           string
+		expectError    bool
+		errorStatus    int
+		expectAgentErr bool
+		wantMsg        string
 	}{
 		{
 			name:     "successful creation - production",
@@ -200,10 +202,11 @@ func TestCreateInstanceToolEndpoints(t *testing.T) {
 			want:     `{"name":"op2","status":"RUNNING"}`,
 		},
 		{
-			name:     "missing required parameter",
-			toolName: "create-instance-prod",
-			body:     `{"name": "instance1"}`,
-			want:     `{"error":"parameter \"project\" is required"}`,
+			name:           "missing required parameter",
+			toolName:       "create-instance-prod",
+			body:           `{"name": "instance1"}`,
+			expectAgentErr: true,
+			wantMsg:        "parameter \"project\" is required",
 		},
 	}
 
@@ -245,14 +248,34 @@ func TestCreateInstanceToolEndpoints(t *testing.T) {
 			}
 
 			var result struct {
-				Result string `json:"result"`
+				Result struct {
+					Content []struct {
+						Text string `json:"text"`
+					} `json:"content"`
+				} `json:"result"`
+				Error *struct {
+					Message string `json:"message"`
+				} `json:"error"`
 			}
 			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 				t.Fatalf("failed to decode response: %v", err)
 			}
+			t.Logf("Response result: %+v", result)
+			if tc.expectAgentErr {
+				if result.Error == nil {
+					t.Fatalf("expected agent error but got success. Result: %+v", result)
+				}
+				if tc.wantMsg != "" && !strings.Contains(result.Error.Message, tc.wantMsg) {
+					t.Fatalf("unexpected error message: got %q, want %q", result.Error.Message, tc.wantMsg)
+				}
+				return
+			}
+			if result.Error != nil {
+				t.Fatalf("unexpected agent error: %s", result.Error.Message)
+			}
 
 			var got, want map[string]any
-			if err := json.Unmarshal([]byte(result.Result), &got); err != nil {
+			if err := json.Unmarshal([]byte(result.Result.Content[0].Text), &got); err != nil {
 				t.Fatalf("failed to unmarshal result: %v", err)
 			}
 			if err := json.Unmarshal([]byte(tc.want), &want); err != nil {

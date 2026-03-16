@@ -202,7 +202,7 @@ func TestCreateInstanceToolEndpoints(t *testing.T) {
 			toolName:    "create-instance-prod",
 			body:        `{"name": "instance1"}`,
 			expectError: true,
-			want:        `parameter \"project\" is required`,
+			want:        `parameter "project" is required`,
 		},
 	}
 
